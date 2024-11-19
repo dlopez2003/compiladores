@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mensajes - Área</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Mensajes - Área: {{ chat['area_nombre'] if chat else "Área Seleccionada" }}</h1>
+
+        {% if usuario['rol'] == 'estudiante' %}
+            <h3>Chat privado con el área</h3>
+        {% elif usuario['rol'] == 'administrador' %}
+            {% if not chat %}
+                <h3>Estudiantes con mensajes en esta área</h3>
+                <ul id="students-list">
+                    {% for estudiante in estudiantes %}
+                        <li id="student-{{ estudiante['estudiante_id'] }}">
+                            <a href="{{ url_for('mensajes', area_id=area_id) }}?estudiante_id={{ estudiante['estudiante_id'] }}">
+                                {{ estudiante['estudiante_nombre'] }}
+                                {% if estudiante['mensajes_no_leidos'] > 0 %}
+                                    <span class="unread-messages">({{ estudiante['mensajes_no_leidos'] }})</span>
+                                {% endif %}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <h3>Chat con: {{ chat['estudiante_nombre'] }}</h3>
+            {% endif %}
+        {% endif %}
+
+        {% if chat %}
+            <ul id="messages-list">
+                {% for mensaje in mensajes %}
+                    <li>
+                        <strong>{{ mensaje['nombre'] }}:</strong> {{ mensaje['mensaje'] }} <br>
+                        <small>{{ mensaje['fecha_hora'] }}</small>
+                    </li>
+                {% endfor %}
+            </ul>
+
+            <form id="send-message-form">
+                <input type="text" id="mensaje" placeholder="Escribe tu mensaje..." required>
+                <button type="submit">Enviar</button>
+            </form>
+        {% endif %}
+
+        <a href="{{ url_for('dashboard') }}">Volver al Dashboard</a>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        var socket = io.connect();
+
+        {% if chat %}
+        // Enviar mensaje
+        document.getElementById('send-message-form').onsubmit = function(event) {
+            event.preventDefault();
+
+            var mensaje = document.getElementById('mensaje').value;
+            var chat_id = {{ chat['id'] }};
+            var usuario_id = {{ usuario['id'] }};
+            var usuario_nombre = "{{ usuario['nombre'] }}";
+
+            socket.emit('send_message', {
+                'usuario_id': usuario_id,
+                'mensaje': mensaje,
+                'chat_id': chat_id,
+                'usuario_nombre': usuario_nombre
+            });
+
+            document.getElementById('mensaje').value = '';
+        };
+
+        // Recibir nuevos mensajes
+        socket.on('new_message', function(data) {
+            if (data.chat_id == {{ chat['id'] }}) {
+                var messageElement = document.createElement('li');
+                messageElement.innerHTML = `<strong>${data.usuario_nombre}:</strong> ${data.mensaje} <br><small>${data.fecha_hora}</small>`;
+                document.getElementById('messages-list').appendChild(messageElement);
+            }
+
+            // Actualizar la lista de estudiantes con nuevos mensajes no leídos
+            var studentElement = document.getElementById('student-' + data.usuario_id);
+            if (studentElement) {
+                var unreadCount = studentElement.querySelector('.unread-messages');
+                if (unreadCount) {
+                    unreadCount.textContent = `(${parseInt(unreadCount.textContent.slice(1, -1)) + 1})`;
+                } else {
+                    var unreadSpan = document.createElement('span');
+                    unreadSpan.classList.add('unread-messages');
+                    unreadSpan.textContent = `(1)`;
+                    studentElement.querySelector('a').appendChild(unreadSpan);
+                }
+            }
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
